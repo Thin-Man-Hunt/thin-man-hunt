@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reel — shared photo wall</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap');
+
+  :root {
+    --bg: #03202f;
+    --surface: #085f0a;
+    --surface-2: #085f0a;
+    --amber: #a1e0f7;
+    --amber-dim: #a1e0f7;
+    --rust: #a1e0f7;
+    --text: #f2ede1;
+    --text-dim: #c7c7c7;
+    --hole: #03202f;
+    --border: #698da6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif, Arial,;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 0.9rem;
+  }
+
+  .eyebrow::before { content: "● REC  "; color: var(--rust); }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: clamp(2.2rem, 6vw, 3.4rem);
+    margin: 0 0 0.6rem;
+    letter-spacing: -0.01em;
+  }
+
+  header p.sub {
+    font-family: 'Inter', sans-serif;
+    color: var(--text-dim);
+    font-size: 18px;
+    max-width: 42ch;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ---------- Camera capture ---------- */
+  .capture-panel {
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin-bottom: 2.5rem;
+    text-align: center;
+  }
+
+  .camera-stage {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    margin: 0 auto;
+    background: var(--hole);
+    border-radius: 3px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    display: none;
+  }
+
+  .camera-stage.active { display: block; }
+
+  .camera-stage video, .camera-stage canvas, .camera-stage img.snapshot {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .camera-stage canvas { display: none; }
+
+  .shutter-frame {
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgba(232,163,61,0.35);
+    pointer-events: none;
+  }
+
+  .start-camera {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14.5px;
+    padding: 13px 22px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .start-camera:hover { border-color: var(--amber); color: var(--amber); }
+
+  .start-camera .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--rust);
+    flex-shrink: 0;
+  }
+
+  .capture-panel p.lead {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin: 0 0 1.1rem;
+  }
+
+  .camera-controls {
+    display: none;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 1.1rem;
+  }
+
+  .camera-controls.active { display: flex; }
+
+  .shutter-btn {
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    background: var(--amber);
+    border: 4px solid var(--surface-2);
+    box-shadow: 0 0 0 2px var(--amber);
+    cursor: pointer;
+  }
+
+  .shutter-btn:active { background: var(--amber-dim); }
+
+  .cancel-btn, .retake-btn, .confirm-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    padding: 0 18px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .confirm-btn {
+    background: var(--amber);
+    border-color: var(--amber);
+    color: #1b1509;
+    font-weight: 500;
+  }
+
+  .cancel-btn:hover { border-color: var(--rust); color: var(--rust); }
+
+  .flip-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 20px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .flip-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .retake-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .confirm-btn:hover { background: #f0b558; }
+
+  .camera-error {
+    color: var(--rust);
+    font-size: 13px;
+    margin-top: 1rem;
+    display: none;
+  }
+
+  .camera-error.show { display: block; }
+
+  /* ---------- Frame counter row ---------- */
+  .counter-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.7rem;
+    margin-bottom: 1.5rem;
+  }
+
+  #status-msg { color: var(--amber); }
+
+  /* ---------- Filmstrip gallery ---------- */
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 4px;
+    background: var(--hole);
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .frame {
+    position: relative;
+    background: var(--surface);
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+  }
+
+  .frame img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .frame .num {
+    position: absolute;
+    bottom: 6px; left: 7px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.85);
+    background: rgba(0,0,0,0.45);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .empty-state .num { font-family: 'IBM Plex Mono', monospace; color: var(--amber-dim); display:block; margin-bottom: 0.5rem; font-size: 12px; letter-spacing: 0.1em; }
+
+  .lightbox {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(10,9,6,0.92);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    cursor: zoom-out;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 3px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+
+  footer {
+    text-align: center;
+    margin-top: 3rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  @media (max-width: 560px) {
+    .contact-sheet { flex-direction: column; align-items: stretch; text-align: center; }
+    .contact-sheet .qr-box { margin: 0 auto; }
+    .link-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <h1>Congratulations. You have found a thin man.</h1>
+    <p class="sub">Take a picture with him and rehide him so the search can go on.</p>
+  </header>
+
+  <div class="capture-panel">
+    <p class="lead">Photos are taken live through your camera — nothing from your library can be added.</p>
+
+    <button class="start-camera" id="start-camera-btn"><span class="dot"></span>Open camera</button>
+
+    <div class="camera-stage" id="camera-stage">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="camera-canvas"></canvas>
+      <img id="camera-snapshot" class="snapshot" alt="Captured photo" style="display:none;">
+      <div class="shutter-frame"></div>
+    </div>
+
+    <div class="camera-controls" id="live-controls">
+      <button class="cancel-btn" id="cancel-btn">Cancel</button>
+      <button class="shutter-btn" id="shutter-btn" title="Take photo"></button>
+      <button class="flip-btn" id="flip-btn" title="Switch camera">⟲</button>
+    </div>
+
+    <div class="camera-controls" id="review-controls">
+      <button class="retake-btn" id="retake-btn">Retake</button>
+      <button class="confirm-btn" id="confirm-btn">Add to reel</button>
+    </div>
+
+    <p class="camera-error" id="camera-error"></p>
+  </div>
+
+  <div class="counter-row">
+    <span id="frame-count">0 frames</span>
+    <span id="status-msg"></span>
+  </div>
+
+  <div id="gallery"></div>
+
+</div>
+
+<div class="lightbox" id="lightbox">
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  const SUPABASE_URL = "https://ntdimftdcaadeiozawzj.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_cjiVeerqcG7TGoMBMpm8vg_52LTI5Jb";
+  const BUCKET = "photos";
+  const MAX_DIM = 1600;
+  const JPEG_QUALITY = 0.82;
+
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const gallery = document.getElementById('gallery');
+  const frameCount = document.getElementById('frame-count');
+  const statusMsg = document.getElementById('status-msg');
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img');
+
+  const startCameraBtn = document.getElementById('start-camera-btn');
+  const cameraStage = document.getElementById('camera-stage');
+  const video = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  const snapshotImg = document.getElementById('camera-snapshot');
+  const liveControls = document.getElementById('live-controls');
+  const reviewControls = document.getElementById('review-controls');
+  const shutterBtn = document.getElementById('shutter-btn');
+  const flipBtn = document.getElementById('flip-btn');
+  const cancelBtn = document.getElementById('cancel-btn');
+  const retakeBtn = document.getElementById('retake-btn');
+  const confirmBtn = document.getElementById('confirm-btn');
+  const cameraError = document.getElementById('camera-error');
+
+  let photos = [];
+  let mediaStream = null;
+  let capturedDataUrl = null;
+  let currentFacingMode = 'environment';
+
+  // ---------- Gallery rendering (no delete control) ----------
+  function renderGallery() {
+    frameCount.textContent = photos.length + (photos.length === 1 ? ' frame' : ' frames');
+
+    if (photos.length === 0) {
+      gallery.innerHTML = '<div class="empty-state"><span class="num">FRAME 00</span>No photos yet — be the first to add one.</div>';
+      return;
+    }
+
+    const sorted = [...photos].sort((a, b) => b.uploadedAt - a.uploadedAt);
+    gallery.innerHTML = '';
+    const strip = document.createElement('div');
+    strip.className = 'strip';
+
+    sorted.forEach((p, i) => {
+      const frame = document.createElement('div');
+      frame.className = 'frame';
+
+      const img = document.createElement('img');
+      img.src = p.dataUrl;
+      img.alt = 'Photo taken live';
+      img.loading = 'lazy';
+      img.addEventListener('click', () => openLightbox(p.dataUrl));
+
+      const num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = '#' + String(sorted.length - i).padStart(2, '0');
+
+      frame.appendChild(img);
+      frame.appendChild(num);
+      strip.appendChild(frame);
+    });
+
+    gallery.appendChild(strip);
+  }
+
+  function openLightbox(src) {
+    lightboxImg.src = src;
+    lightbox.classList.add('open');
+  }
+  lightbox.addEventListener('click', () => {
+    lightbox.classList.remove('open');
+    lightboxImg.src = '';
+  });
+
+  // ---------- Storage (Supabase — read + add only, no delete) ----------
+  async function loadPhotos() {
+    statusMsg.textContent = 'Loading reel…';
+    try {
+      const { data, error } = await supabaseClient.storage.from(BUCKET).list('', {
+        limit: 500,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+      if (error) throw error;
+
+      const files = (data || []).filter(f => f.id && /\.(jpe?g|png|webp|gif)$/i.test(f.name || ''));
+      photos = files.map(f => {
+        const { data: urlData } = supabaseClient.storage.from(BUCKET).getPublicUrl(f.name);
+        const created = f.created_at ? new Date(f.created_at).getTime() : Date.now();
+        return { id: f.name, dataUrl: urlData.publicUrl, uploadedAt: created };
+      });
+      renderGallery();
+      statusMsg.textContent = '';
+    } catch (e) {
+      console.error('Load failed', e);
+      statusMsg.textContent = 'Could not load photos.';
+    }
+  }
+
+  async function savePhoto(dataUrl) {
+    const fileName = Date.now() + '-' + Math.random().toString(36).slice(2, 9) + '.jpg';
+    statusMsg.textContent = 'Adding to reel…';
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const { error } = await supabaseClient.storage.from(BUCKET).upload(fileName, blob, {
+        contentType: 'image/jpeg',
+        upsert: false
+      });
+      if (error) throw error;
+
+      const { data: urlData } = supabaseClient.storage.from(BUCKET).getPublicUrl(fileName);
+      const record = { id: fileName, dataUrl: urlData.publicUrl, uploadedAt: Date.now() };
+      photos = [record, ...photos];
+      renderGallery();
+      statusMsg.textContent = '';
+    } catch (e) {
+      console.error('Save failed', e);
+      statusMsg.textContent = 'Could not save that photo — try again.';
+      renderGallery();
+      setTimeout(() => statusMsg.textContent = '', 3000);
+    }
+  }
+
+  // ---------- Live camera capture ----------
+  function resizeCanvasFromVideo() {
+    let { videoWidth: w, videoHeight: h } = video;
+    if (!w || !h) { w = 1280; h = 960; }
+    if (w > MAX_DIM || h > MAX_DIM) {
+      if (w > h) { h = Math.round(h * (MAX_DIM / w)); w = MAX_DIM; }
+      else { w = Math.round(w * (MAX_DIM / h)); h = MAX_DIM; }
+    }
+    canvas.width = w;
+    canvas.height = h;
+  }
+
+  async function startCamera() {
+    cameraError.classList.remove('show');
+    cameraError.textContent = '';
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: currentFacingMode } },
+        audio: false
+      });
+      video.srcObject = mediaStream;
+      video.style.display = 'block';
+      video.style.transform = currentFacingMode === 'user' ? 'scaleX(-1)' : 'none';
+      snapshotImg.style.display = 'none';
+      cameraStage.classList.add('active');
+      liveControls.classList.add('active');
+      reviewControls.classList.remove('active');
+      startCameraBtn.style.display = 'none';
+    } catch (e) {
+      console.error('Camera access failed', e);
+      cameraError.textContent = 'Camera access was blocked or unavailable. Allow camera permission in your browser to add a photo.';
+      cameraError.classList.add('show');
+    }
+  }
+
+  async function flipCamera() {
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+    await startCamera();
+  }
+
+  function stopCamera() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+    cameraStage.classList.remove('active');
+    liveControls.classList.remove('active');
+    reviewControls.classList.remove('active');
+    startCameraBtn.style.display = 'inline-flex';
+    capturedDataUrl = null;
+  }
+
+  function takeSnapshot() {
+    resizeCanvasFromVideo();
+    const ctx = canvas.getContext('2d');
+    if (currentFacingMode === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    capturedDataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+
+    snapshotImg.src = capturedDataUrl;
+    snapshotImg.style.display = 'block';
+    video.style.display = 'none';
+
+    liveControls.classList.remove('active');
+    reviewControls.classList.add('active');
+  }
+
+  startCameraBtn.addEventListener('click', startCamera);
+  flipBtn.addEventListener('click', flipCamera);
+  cancelBtn.addEventListener('click', stopCamera);
+  shutterBtn.addEventListener('click', takeSnapshot);
+
+  retakeBtn.addEventListener('click', () => {
+    capturedDataUrl = null;
+    snapshotImg.style.display = 'none';
+    video.style.display = 'block';
+    reviewControls.classList.remove('active');
+    liveControls.classList.add('active');
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    if (!capturedDataUrl) return;
+    const toSave = capturedDataUrl;
+    stopCamera();
+    await savePhoto(toSave);
+  });
+
+  renderGallery();
+  loadPhotos();
+})();
+</script>
+
+</body>
+</html>
