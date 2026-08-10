@@ -202,6 +202,38 @@
 
   .camera-error.show { display: block; }
 
+  .id-field {
+    display: none;
+    max-width: 280px;
+    margin: 1.1rem auto 0;
+    text-align: left;
+  }
+
+  .id-field.active { display: block; }
+
+  .id-field label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+  }
+
+  .id-field input {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 4px;
+  }
+
+  .id-field input:focus { outline: 1px solid var(--amber); }
+
   /* ---------- Frame counter row ---------- */
   .counter-row {
     display: flex;
@@ -219,7 +251,104 @@
 
   #status-msg { color: var(--amber); }
 
+  /* ---------- Leaderboard ---------- */
+  .leaderboard {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.5rem 1.5rem 1.25rem;
+    margin-bottom: 2rem;
+  }
+
+  .leaderboard.active { display: block; }
+
+  .leaderboard-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 1.1rem;
+  }
+
+  .lb-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 34px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .lb-row:last-child { margin-bottom: 0; }
+
+  .lb-rank {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  .lb-track {
+    background: var(--hole);
+    border-radius: 3px;
+    height: 22px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .lb-fill {
+    height: 100%;
+    background: var(--amber);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    padding-left: 9px;
+    min-width: 34px;
+    transition: width 0.4s ease;
+  }
+
+  .lb-fill span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: #1b1509;
+    white-space: nowrap;
+  }
+
+  .lb-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
   /* ---------- Filmstrip gallery ---------- */
+  .month-section {
+    margin-bottom: 1.75rem;
+  }
+
+  .month-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .month-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 0.6rem;
+  }
+
+  .month-heading .month-count {
+    color: var(--text-dim);
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 11.5px;
+  }
+
   .strip {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -251,6 +380,18 @@
     background: rgba(0,0,0,0.45);
     padding: 1px 5px;
     border-radius: 2px;
+  }
+
+  .frame .tm-badge {
+    position: absolute;
+    top: 6px; left: 7px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: #1b1509;
+    background: var(--amber);
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-weight: 500;
   }
 
   .empty-state {
@@ -318,6 +459,11 @@
       <button class="flip-btn" id="flip-btn" title="Switch camera">⟲</button>
     </div>
 
+    <div class="id-field" id="id-field">
+      <label for="thinman-id-input">Thin man's ID</label>
+      <input type="text" id="thinman-id-input" placeholder="e.g. abc" inputmode="text" maxlength="24">
+    </div>
+
     <div class="camera-controls" id="review-controls">
       <button class="retake-btn" id="retake-btn">Retake</button>
       <button class="confirm-btn" id="confirm-btn">Add to reel</button>
@@ -330,6 +476,8 @@
     <span id="frame-count">0 frames</span>
     <span id="status-msg"></span>
   </div>
+
+  <div class="leaderboard" id="leaderboard"></div>
 
   <div id="gallery"></div>
 
@@ -350,6 +498,7 @@
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const gallery = document.getElementById('gallery');
+  const leaderboard = document.getElementById('leaderboard');
   const frameCount = document.getElementById('frame-count');
   const statusMsg = document.getElementById('status-msg');
   const lightbox = document.getElementById('lightbox');
@@ -368,15 +517,51 @@
   const retakeBtn = document.getElementById('retake-btn');
   const confirmBtn = document.getElementById('confirm-btn');
   const cameraError = document.getElementById('camera-error');
+  const idField = document.getElementById('id-field');
+  const idInput = document.getElementById('thinman-id-input');
 
   let photos = [];
   let mediaStream = null;
   let capturedDataUrl = null;
   let currentFacingMode = 'environment';
 
-  // ---------- Gallery rendering (no delete control) ----------
+  // ---------- Gallery rendering (grouped by month, no delete control) ----------
+  function renderLeaderboard() {
+    const counts = new Map();
+    photos.forEach(p => {
+      if (!p.thinManId) return;
+      counts.set(p.thinManId, (counts.get(p.thinManId) || 0) + 1);
+    });
+
+    if (counts.size === 0) {
+      leaderboard.classList.remove('active');
+      leaderboard.innerHTML = '';
+      return;
+    }
+
+    const top = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    const maxCount = top[0][1];
+
+    leaderboard.innerHTML = '<div class="leaderboard-title">Most-found thin men</div>' +
+      top.map((entry, i) => {
+        const [tmId, count] = entry;
+        const pct = Math.max(14, Math.round((count / maxCount) * 100));
+        return '<div class="lb-row">' +
+          '<span class="lb-rank">#' + (i + 1) + '</span>' +
+          '<div class="lb-track"><div class="lb-fill" style="width:' + pct + '%"><span>TM ' + tmId + '</span></div></div>' +
+          '<span class="lb-count">' + count + (count === 1 ? ' find' : ' finds') + '</span>' +
+        '</div>';
+      }).join('');
+
+    leaderboard.classList.add('active');
+  }
+
   function renderGallery() {
     frameCount.textContent = photos.length + (photos.length === 1 ? ' frame' : ' frames');
+    renderLeaderboard();
 
     if (photos.length === 0) {
       gallery.innerHTML = '<div class="empty-state"><span class="num">FRAME 00</span>No photos yet — be the first to add one.</div>';
@@ -384,30 +569,69 @@
     }
 
     const sorted = [...photos].sort((a, b) => b.uploadedAt - a.uploadedAt);
-    gallery.innerHTML = '';
-    const strip = document.createElement('div');
-    strip.className = 'strip';
 
-    sorted.forEach((p, i) => {
-      const frame = document.createElement('div');
-      frame.className = 'frame';
-
-      const img = document.createElement('img');
-      img.src = p.dataUrl;
-      img.alt = 'Photo taken live';
-      img.loading = 'lazy';
-      img.addEventListener('click', () => openLightbox(p.dataUrl));
-
-      const num = document.createElement('span');
-      num.className = 'num';
-      num.textContent = '#' + String(sorted.length - i).padStart(2, '0');
-
-      frame.appendChild(img);
-      frame.appendChild(num);
-      strip.appendChild(frame);
+    // Group into month buckets, most recent month first.
+    const groups = [];
+    const groupIndex = new Map();
+    sorted.forEach(p => {
+      const d = new Date(p.uploadedAt);
+      const key = d.getFullYear() + '-' + d.getMonth();
+      if (!groupIndex.has(key)) {
+        const label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+        const group = { label, items: [] };
+        groupIndex.set(key, group);
+        groups.push(group);
+      }
+      groupIndex.get(key).items.push(p);
     });
 
-    gallery.appendChild(strip);
+    gallery.innerHTML = '';
+    let frameNumber = sorted.length;
+
+    groups.forEach(group => {
+      const section = document.createElement('div');
+      section.className = 'month-section';
+
+      const heading = document.createElement('div');
+      heading.className = 'month-heading';
+      heading.innerHTML = '<span>' + group.label + '</span><span class="month-count">' +
+        group.items.length + (group.items.length === 1 ? ' frame' : ' frames') + '</span>';
+      section.appendChild(heading);
+
+      const strip = document.createElement('div');
+      strip.className = 'strip';
+
+      group.items.forEach(p => {
+        const frame = document.createElement('div');
+        frame.className = 'frame';
+
+        const img = document.createElement('img');
+        img.src = p.dataUrl;
+        img.alt = 'Photo taken live';
+        img.loading = 'lazy';
+        img.addEventListener('click', () => openLightbox(p.dataUrl));
+
+        const num = document.createElement('span');
+        num.className = 'num';
+        num.textContent = '#' + String(frameNumber).padStart(2, '0');
+        frameNumber--;
+
+        frame.appendChild(img);
+        frame.appendChild(num);
+
+        if (p.thinManId) {
+          const badge = document.createElement('span');
+          badge.className = 'tm-badge';
+          badge.textContent = 'TM ' + p.thinManId;
+          frame.appendChild(badge);
+        }
+
+        strip.appendChild(frame);
+      });
+
+      section.appendChild(strip);
+      gallery.appendChild(section);
+    });
   }
 
   function openLightbox(src) {
@@ -420,6 +644,12 @@
   });
 
   // ---------- Storage (Supabase — read + add only, no delete) ----------
+  const TM_TAG_RE = /--tm_([a-z0-9-]+)\.(jpe?g|png|webp|gif)$/i;
+
+  function sanitizeThinManId(raw) {
+    return (raw || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24);
+  }
+
   async function loadPhotos() {
     statusMsg.textContent = 'Loading reel…';
     try {
@@ -433,7 +663,13 @@
       photos = files.map(f => {
         const { data: urlData } = supabaseClient.storage.from(BUCKET).getPublicUrl(f.name);
         const created = f.created_at ? new Date(f.created_at).getTime() : Date.now();
-        return { id: f.name, dataUrl: urlData.publicUrl, uploadedAt: created };
+        const tagMatch = f.name.match(TM_TAG_RE);
+        return {
+          id: f.name,
+          dataUrl: urlData.publicUrl,
+          uploadedAt: created,
+          thinManId: tagMatch ? tagMatch[1] : null
+        };
       });
       renderGallery();
       statusMsg.textContent = '';
@@ -443,8 +679,10 @@
     }
   }
 
-  async function savePhoto(dataUrl) {
-    const fileName = Date.now() + '-' + Math.random().toString(36).slice(2, 9) + '.jpg';
+  async function savePhoto(dataUrl, thinManId) {
+    const cleanId = sanitizeThinManId(thinManId);
+    const base = Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+    const fileName = cleanId ? base + '--tm_' + cleanId + '.jpg' : base + '.jpg';
     statusMsg.textContent = 'Adding to reel…';
     try {
       const blob = await (await fetch(dataUrl)).blob();
@@ -455,7 +693,7 @@
       if (error) throw error;
 
       const { data: urlData } = supabaseClient.storage.from(BUCKET).getPublicUrl(fileName);
-      const record = { id: fileName, dataUrl: urlData.publicUrl, uploadedAt: Date.now() };
+      const record = { id: fileName, dataUrl: urlData.publicUrl, uploadedAt: Date.now(), thinManId: cleanId || null };
       photos = [record, ...photos];
       renderGallery();
       statusMsg.textContent = '';
@@ -519,6 +757,8 @@
     cameraStage.classList.remove('active');
     liveControls.classList.remove('active');
     reviewControls.classList.remove('active');
+    idField.classList.remove('active');
+    idInput.value = '';
     startCameraBtn.style.display = 'inline-flex';
     capturedDataUrl = null;
   }
@@ -539,6 +779,8 @@
 
     liveControls.classList.remove('active');
     reviewControls.classList.add('active');
+    idField.classList.add('active');
+    idInput.focus();
   }
 
   startCameraBtn.addEventListener('click', startCamera);
@@ -551,14 +793,16 @@
     snapshotImg.style.display = 'none';
     video.style.display = 'block';
     reviewControls.classList.remove('active');
+    idField.classList.remove('active');
     liveControls.classList.add('active');
   });
 
   confirmBtn.addEventListener('click', async () => {
     if (!capturedDataUrl) return;
     const toSave = capturedDataUrl;
+    const thinManId = idInput.value;
     stopCamera();
-    await savePhoto(toSave);
+    await savePhoto(toSave, thinManId);
   });
 
   renderGallery();
